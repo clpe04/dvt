@@ -12,7 +12,7 @@ Provided in this section is a short description of the functions, along with exa
 
 #### check
 
-Creates a validation function with the functions defined name or a new name.
+Creates a validation function with the functions defined name or a new name as key.
 
 The two forms of this function is:
 
@@ -23,23 +23,27 @@ argument, which are the value/entry to check, and it must return a boolean.
 
 The function has to be defined or an exception will be thrown.
 
-##### [function :as name]
+##### [function :as key]
 
 Returns the given function as a validation check associated with the
-specified name. The rules for the functions arguments and return type is the same as the above.
+specified key. The rules for the functions arguments and return type is the same as the above.
 
-This variant of the function allows anonymeus functions and functions to be defined as
-validation checks.
+This variant of the function also allows anonymeus functions to be defined as validation checks.
 
 #### on-field
 
 Takes one or more validation checks and returns a collection of the given validation checks
-associated to validate on a the given field.
+associated to validate on the specified field.
 
 #### validator
 
-Takes one or more on-filed collections or validation checks and returns a validator function, which
+Takes one or more on-field collections or validation checks and returns a validator function, which
 can be used to validate a key value structure such as a map or structmap.
+
+#### checks
+
+Takes a validator or validated data entry and returns a list of the checks associated with
+the validator, or called on the entry.
 
 #### valid?
 
@@ -55,46 +59,94 @@ the given check and a entry to check.
 
 #### Example of validator and validation
 
-(defn over-18
-  [age]
-  (>= age 18))
+    (defn over-18
+      [age]
+      (>= age 18))
 
-(defn is-age
-  [valid-age age-to-check]
-  (= valid-age age-to-check))
+    (defn is-age
+      [valid-age age-to-check]
+      (= valid-age age-to-check))
 
-(def validate-person
-  (validator
-    (on-field :name
-      (check #(= "Test" %) :as :named-test))
-    (on-field :age
-      (check over-18)
-      (check (partial is-age 20) :as :is-age-20))))
+    (defn valid-zip
+      [zip-code]
+      (let [zip (str zip-code)]
+      (and (every? #(Character/isDigit %)  zip) (= 4 (count zip)))))
 
-The validator function above will call the validation function, associated with
-the key :named-test on the field associated with the key :name in the entries
-from the collection validated.
+    (def validate-person
+      (validator
+        (on-field :name
+          (check #(= "Test" %) :as :named-test))
+        (on-field :age
+          (check over-18)
+          (check (partial is-age 20) :as :is-age-20))))
 
-(validate-person {:name "Test" :age 26})
+     (def validate-address
+       (validator
+         (on-field :zip-code
+           (check valid-zip))))
+
+The validator functions above, will validate the entry given, by calling
+the validation checks associated with the validator, on the fields they are associated with in
+the validator specification.
+
+    (validate-person {:name "Test" :age 26})
 
 The call above returns the same map as it was given, but the returned map has a new entry in
 its metadata containing the validation results.
 
-{:dvt {:is-age-20 false, :over-18 true, :named-test true}}
+    {:dvt {:is-age-20 false, :over-18 true, :named-test true}}
+
+If more than one validator is run on a entry, the validation results are merged together.
+In the example below, the two validations is called after each other, this doesn't need to be the
+case you can make one or more validations on a collection and then validation more later, and
+it will still merge the data, as long as no two checks has the same associated key.
+
+    (validate-address (validate-person {:name "Test" :age 26 :zip-code 2760}))
+
+The meta data for the above call is:
+
+    {:dvt {:valid-zip true, :named-test true, :over-18 true, :is-age-20 false}}
+
+If you have a collection of data entries, with existing meta data, this data will be intact after the
+validation as long as nothing of it is placed under the key :dvt, which is used in the DVT to isolate
+the DVT data.
+
+    (meta (validate-person ^{:test-data 1234} {:name "Test" :age 26}))
+
+The meta data for the above call is:
+
+    {:dvt {:named-test true, :over-18 true, :is-age-20 false}, :test-data 1234}
 
 #### Example of tests on validated entry
 
-This example uses the validate entry from the example above, in this example defined as "e1"
+Theese examples uses the validated entries from the examples above, the single validated entry
+is calles "e1" and the double validated entry is called "e2".
 
-(valid? :is-age-20 e1) - will yield false
+You can use the valid? and invalid? function to check result for specific validation checks.
 
-(invalid? :is-age-20 e1) - will yield true
+    (valid? :is-age-20 e1) - will yield false
+    
+    (invalid? :is-age-20 e1) - will yield true
 
 The two test can be used with the normal clojure core to make more complex test, such as the one below
 
-(every? true? (map #(valid? % e1) [:is-age-29 :over-18 :named-test])) - will yield false
+    (every? true? (map #(valid? % e1) [:is-age-29 :over-18 :named-test])) - will yield false
+    
+    (some false? (map #(invalid? % e1) [:is-age-29 :over-18 :named-test])) - will yield true
 
-(some false? (map #(invalid? % e1) [:is-age-29 :over-18 :named-test])) - will yield true
+The two examples above can be rewritten by using the checks function instead of defining a vector
+with the checks, as shown below.
+
+    (every? true? (map #(valid? % e1) (checks e1))) - will yield false
+    
+    (some false? (map #(invalid? % e1) (checks e1))) - will yield true
+
+The checks function can also be used to just see which checks have been performed on a entry,
+or will be performed by a given validator.
+
+    (checks e2) - will return the list: (:valid-zip :named-test :over-18 :is-age-20)
+
+    (checks validate-person) - will return the list: (:named-test :over-18 :is-age-20)
 
 ## License
 
