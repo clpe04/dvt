@@ -26,12 +26,22 @@
   and returns the entry with the return values of the checks added as meta data."
   [& checks]
   (let [checks (flatten checks)]
-    (fn [entry]
-      (with-meta entry
-        (assoc (meta entry)
-              :dvt (zipmap (map #(keyword (:name (meta %))) checks)
-                            (map #(% entry) checks)))))))
+    (let [check-names (map #(keyword (:name (meta %))) checks)]
+      ^{:dvt {:checks check-names}}
+      (fn [entry]
+        (with-meta entry
+          (assoc (meta entry)
+            :dvt (merge (:dvt (meta entry)) (zipmap check-names
+                         (map #(% entry) checks)))))))))
 
+(defn checks
+  "Returns a list with all the keys associated with the checks in the given validator, or
+  all the checks made on a given entry"
+  [validator]
+  (if (:checks (:dvt (meta validator)))
+    (:checks (:dvt (meta validator)))
+    (keys (:dvt (meta validator)))))
+  
 (defn valid?
   "Test used to check whether a given validation succeeded"
   [check-name entry]
