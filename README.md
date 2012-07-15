@@ -59,6 +59,12 @@ the given check and a entry to check.
 
 #### Example of validator and validation
 
+    (defn full-name-test
+      [entry]
+      (and
+        (= "Test" (:first-name entry))
+        (= "Testing" (:last-name entry))))
+
     (defn over-18
       [age]
       (>= age 18))
@@ -74,7 +80,8 @@ the given check and a entry to check.
 
     (def validate-person
       (validator
-        (on-field :name
+        (check full-name-test)
+        (on-field :first-name
           (check #(= "Test" %) :as :named-test))
         (on-field :age
           (check over-18)
@@ -87,35 +94,37 @@ the given check and a entry to check.
 
 The validator functions above, will validate the entry given, by calling
 the validation checks associated with the validator, on the fields they are associated with in
-the validator specification.
+the validator specification. The first validation checks isn't associated with any field and will
+be called on the entire entry.
 
-    (validate-person {:name "Test" :age 26})
+    (validate-person {:first-name "Test" :last-name "Testing" :age 26})
 
 The call above returns the same map as it was given, but the returned map has a new entry in
 its metadata containing the validation results.
 
-    {:dvt {:is-age-20 false, :over-18 true, :named-test true}}
+    {:dvt {:full-name-test true, :named-test true, :over-18 true, :is-age-20 false}}
 
 If more than one validator is run on a entry, the validation results are merged together.
 In the example below, the two validations is called after each other, this doesn't need to be the
 case you can make one or more validations on a collection and then validation more later, and
 it will still merge the data, as long as no two checks has the same associated key.
 
-    (validate-address (validate-person {:name "Test" :age 26 :zip-code 2760}))
+    (validate-address
+      (validate-person {:first-name "Test" :last-name "Testing" :age 26 :zip-code 2760}))
 
 The meta data for the above call is:
 
-    {:dvt {:valid-zip true, :named-test true, :over-18 true, :is-age-20 false}}
+    {:dvt {:valid-zip true, :full-name-test true, :named-test true, :over-18 true, :is-age-20 false}}
 
 If you have a collection of data entries, with existing meta data, this data will be intact after the
 validation as long as nothing of it is placed under the key :dvt, which is used in the DVT to isolate
 the DVT data.
 
-    (meta (validate-person ^{:test-data 1234} {:name "Test" :age 26}))
+    (meta (validate-person ^{:test-data 1234} {:first-name "Test" :last-name "Testing" :age 26}))
 
 The meta data for the above call is:
 
-    {:dvt {:named-test true, :over-18 true, :is-age-20 false}, :test-data 1234}
+    {:dvt {:full-name-test true, :named-test true, :over-18 true, :is-age-20 false}, :test-data 1234}
 
 #### Example of tests on validated entry
 
@@ -130,23 +139,33 @@ You can use the valid? and invalid? function to check result for specific valida
 
 The two test can be used with the normal clojure core to make more complex test, such as the one below
 
-    (every? true? (map #(valid? % e1) [:is-age-29 :over-18 :named-test])) - will yield false
+    (every? true?
+            (map #(valid? % e1) [:is-age-29 :over-18 :named-test :full-name-test]))
+
+Which will return false
     
-    (some false? (map #(invalid? % e1) [:is-age-29 :over-18 :named-test])) - will yield true
+    (some false?
+          (map #(invalid? % e1) [:is-age-29 :over-18 :named-test :full-name-test]))
+
+Which will return true
 
 The two examples above can be rewritten by using the checks function instead of defining a vector
 with the checks, as shown below.
 
-    (every? true? (map #(valid? % e1) (checks e1))) - will yield false
+    (every? true? (map #(valid? % e1) (checks e1)))
+
+Which will return false
     
-    (some false? (map #(invalid? % e1) (checks e1))) - will yield true
+    (some false? (map #(invalid? % e1) (checks e1)))
+
+Which will return true
 
 The checks function can also be used to just see which checks have been performed on a entry,
 or will be performed by a given validator.
 
-    (checks e2) - will return the list: (:valid-zip :named-test :over-18 :is-age-20)
+    (checks e2) - will return the list: (:valid-zip :full-name-test :named-test :over-18 :is-age-20)
 
-    (checks validate-person) - will return the list: (:named-test :over-18 :is-age-20)
+    (checks validate-person) - will return the list: (:full-name-test :named-test :over-18 :is-age-20)
 
 ## License
 
